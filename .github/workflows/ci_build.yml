@@ -47,12 +47,6 @@ jobs:
           fetch-depth: 0
           submodules: true
 
-      # =========新增：生成假signing.properties，解决gpr报错=========
-      - name: Generate dummy signing.properties
-        run: |
-          echo "gpr.user=dummy" > signing.properties
-          echo "gpr.key=dummykey" >> signing.properties
-
       - name: Setup JDK
         uses: actions/setup-java@v5
         with:
@@ -63,6 +57,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-overwrite-existing: true
+
+      # 注入GPR鉴权环境变量，Gradle初始化阶段读取，解决拉取私有依赖401
+      - name: Export GPR credentials as Gradle properties
+        env:
+          GPR_USER: ${{ secrets.GPR_USER }}
+          GPR_TOKEN: ${{ secrets.GPR_TOKEN }}
+        run: |
+          echo "ORG_GRADLE_PROJECT_gpr.user=${GPR_USER}" >> $GITHUB_ENV
+          echo "ORG_GRADLE_PROJECT_gpr.key=${GPR_TOKEN}" >> $GITHUB_ENV
 
       - name: Create Sign File
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -160,7 +163,7 @@ jobs:
           commits = event.get("commits", [])
           compare_url = event.get("compare", "")
           caption_limit = 1024
-          branch_text = "Branch:\nHyperOS 3"
+          branch_text = "Branch:\nHyperOS 4"
 
           def escape_code_block(text):
               return text.replace("\\", "\\\\").replace("`", "\\`")
@@ -221,20 +224,6 @@ jobs:
           def build_multiline_code_block(text):
               return f"```\n{escape_code_block(text)}```"
 
-          def build_caption(commit_entries, contributors_text):
-              lines = [
-                  "New push to GitHub",
-                  build_code_block(branch_text),
-                  "",
-                  "Commits:",
-                  build_multiline_code_block(build_commit_text(commit_entries)),
-                  "",
-                  f"Contributors: {build_code_block(contributors_text)}",
-              ]
-              if compare_url:
-                  lines.append(f"Details: [compare]({compare_url})")
-              return "\n".join(lines).strip()
-
           def fit_commit_entries(entries, contributors_text):
               included = []
               for index, entry in enumerate(entries):
@@ -278,6 +267,20 @@ jobs:
           contributors = merge_contributors(parsed_commits)
           contributors_text = ", ".join(contributors) or "Unknown"
           full_commit_entries = [commit["message"] for commit in parsed_commits] or ["No commit details available"]
+
+          def build_caption(commit_entries, contributors_text):
+              lines = [
+                  "New push to GitHub",
+                  build_code_block(branch_text),
+                  "",
+                  "Commits:",
+                  build_multiline_code_block(build_commit_text(commit_entries)),
+                  "",
+                  f"Contributors: {build_code_block(contributors_text)}",
+              ]
+              if compare_url:
+                  lines.append(f"Details: [compare]({compare_url})")
+              return "\n".join(lines).strip()
 
           caption = build_caption(full_commit_entries, contributors_text)
           if len(caption) > caption_limit:
@@ -368,14 +371,6 @@ jobs:
           cd ${{ github.workspace }}
           curl -v "https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup?chat_id=${GROUP_DEBUG_ID}&media=%5B%7B%22type%22:%22document%22,%20%22media%22:%22attach://debug%22,%22parse_mode%22:%22MarkdownV2%22,%22caption%22:${ESCAPED}%7D%5D" -F debug="@${DEBUG}"
 
-  # Host-side NativeHookRuntime tests (app/src/main/cpp/nativehook/ + the
-  # desktop Dart hook's host-testable layers). No device, no Android SDK: the
-  # script compiles with the system clang++.
-  #
-  # Coverage note: this runner is x86_64, so the script SKIPS the ARM64
-  # assembly harness test (it executes AArch64 instructions and needs an aarch64
-  # host). That test therefore has no CI coverage here - the skip is reported,
-  # not hidden.
   native_host_tests:
     runs-on: ubuntu-latest
     steps:
@@ -392,3 +387,4 @@ jobs:
           name: host-native-test-logs
           path: /tmp/nativehook-host-tests/*.log
           if-no-files-found: ignore
+
