@@ -47,6 +47,17 @@ jobs:
           fetch-depth: 0
           submodules: true
 
+      # ==========【关键改动】检出代码后立刻生成 signing.properties！settings.gradle 马上就要读取 ==========
+      - name: Generate signing.properties (GPR credentials)
+        env:
+          GPR_USER: ${{ secrets.GPR_USER }}
+          GPR_TOKEN: ${{ secrets.GPR_TOKEN }}
+        run: |
+          cat > signing.properties <<EOF
+gpr.user=${GPR_USER}
+gpr.key=${GPR_TOKEN}
+EOF
+
       - name: Setup JDK
         uses: actions/setup-java@v5
         with:
@@ -58,23 +69,16 @@ jobs:
         with:
           cache-overwrite-existing: true
 
-      # 注入GPR鉴权环境变量，Gradle初始化阶段读取，解决拉取私有依赖401
-      - name: Export GPR credentials as Gradle properties
-        env:
-          GPR_USER: ${{ secrets.GPR_USER }}
-          GPR_TOKEN: ${{ secrets.GPR_TOKEN }}
-        run: |
-          echo "ORG_GRADLE_PROJECT_gpr.user=${GPR_USER}" >> $GITHUB_ENV
-          echo "ORG_GRADLE_PROJECT_gpr.key=${GPR_TOKEN}" >> $GITHUB_ENV
-
       - name: Create Sign File
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
-          touch signing.properties
-          echo storePassword=${{ secrets.KEY_STORE_PASSWORD }} >> signing.properties
-          echo keyAlias=${{ secrets.ALIAS }} >> signing.properties
-          echo keyPassword='${{ secrets.KEY_STORE_PASSWORD }}' >> signing.properties
-          echo storeFile=../key.jks >> signing.properties
+          # 追加签名相关字段，保留上面已经写好的gpr.user/gpr.key
+          cat >> signing.properties <<EOF
+storePassword=${{ secrets.KEY_STORE_PASSWORD }}
+keyAlias=${{ secrets.ALIAS }}
+keyPassword=${{ secrets.KEY_STORE_PASSWORD }}
+storeFile=../key.jks
+EOF
           echo ${{ secrets.SIGNING_KEY }} | base64 --decode > key.jks
           echo "GIT_ACTOR=${{ secrets.GIT_ACTOR }}" >> $GITHUB_ENV
           echo "GIT_TOKEN=${{ secrets.GIT_TOKEN }}" >> $GITHUB_ENV
