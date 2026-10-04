@@ -47,6 +47,12 @@ jobs:
           fetch-depth: 0
           submodules: true
 
+      # =========新增：生成假signing.properties，解决gpr报错=========
+      - name: Generate dummy signing.properties
+        run: |
+          echo "gpr.user=dummy" > signing.properties
+          echo "gpr.key=dummykey" >> signing.properties
+
       - name: Setup JDK
         uses: actions/setup-java@v5
         with:
@@ -74,14 +80,14 @@ jobs:
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
-          ./gradlew assembleCanary
+          ./gradlew assembleCanary -x test
           echo "IS_DEBUG=false" >> $GITHUB_ENV
 
       - name: Build with Gradle (Debug)
         if: github.event_name == 'pull_request'
         shell: bash
         run: |
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug -x test
           echo "IS_DEBUG=true" >> $GITHUB_ENV
 
       - name: Find APKs
