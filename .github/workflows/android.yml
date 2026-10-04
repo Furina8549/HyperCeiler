@@ -23,4 +23,7 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     - name: Build with Gradle
-      run: ./gradlew build
+      env:
+        ORG_GRADLE_PROJECT_gpr.user: dummy
+        ORG_GRADLE_PROJECT_gpr.key: dummy
+      run: ./gradlew assembleRelease -x test
